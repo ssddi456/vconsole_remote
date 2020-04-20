@@ -254,8 +254,14 @@ function createSelectorFromEvent(el, childSelector) {
                         e.addEventListener(t, function (params) {
                             setTimeout(function () {
                                 // trigger events 
-                                if (params.target) {
-                                    console.log('hook event', t, createSelectorFromEvent(params.target), params);
+                                if (params.target && params.isTrusted) {
+                                    var selector = createSelectorFromEvent(params.target);
+                                    if (selector) {
+                                        window && window.sendCustomEvent(
+                                            t,
+                                            selector,
+                                            params.target.value);
+                                    }
                                 } 
                             });
                             o.call(this, params);
@@ -263,11 +269,24 @@ function createSelectorFromEvent(el, childSelector) {
                     }))
                 },
                 delegate: function (e, t, o, n) {
+                    var eventName = t;
                     e && e.addEventListener(t, function (t) {
                         var r = a.all(o, e);
                         if (r) e: for (var i = 0; i < r.length; i++)
                             for (var l = t.target; l;) {
                                 if (l == r[i]) {
+                                    setTimeout(function () {
+                                        // trigger events 
+                                        if (t.target && t.isTrusted) {
+                                            var selector = createSelectorFromEvent(t.target);
+                                            if (selector) {
+                                                window && window.sendCustomEvent(
+                                                    eventName,
+                                                    selector,
+                                                    t.target.value);
+                                            }
+                                        }
+                                    });
                                     n.call(l, t);
                                     break e
                                 }

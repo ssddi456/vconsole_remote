@@ -8,13 +8,17 @@ const app = express();
 const server = http.createServer(app);
 const io = socketio(server);
 
-
 app.use(express.static(path.join(__dirname, 'public')))
 
-io.on('connection', function( ){
-    
+io.on('connection', function (socket) {
+    console.log('connected?');
+
+    socket.on('dispatch_event', function (e) {
+        console.log('dispatch_event', socket.id, e);
+        socket.broadcast.emit('dispatch_event', e);
+    });
 });
 
-app.listen(function(){
-    console.log('app .listen, ', app.port)
+var listener = server.listen(51753, function () {
+    console.log('app .listen, ', listener.address().port)
 });
