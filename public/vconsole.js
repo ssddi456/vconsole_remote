@@ -633,6 +633,7 @@ function createSelectorFromEvent(el, childSelector) {
                     }, {
                         key: "printRepeatLog",
                         value: function () {
+                            originLog('printRepeatLog', e, t);
                             var e = r.default.one("#" + h._id),
                                 t = r.default.one(".vc-item-repeat", e);
                             t || ((t = document.createElement("i")).className = "vc-item-repeat", e.insertBefore(t, e.lastChild)), h.count, h.count++, t.innerHTML = h.count
@@ -640,6 +641,7 @@ function createSelectorFromEvent(el, childSelector) {
                     }, {
                         key: "printNewLog",
                         value: function (e, t) {
+                            originLog('printNewLog', e, t);
                             var o = r.default.render(a.default, {
                                 _id: e._id,
                                 logType: e.logType,

@@ -32,3 +32,4 @@ window.sendCustomEvent = function (event, selector, value) {
     })
 }
 
+var originLog = console.log.bind(console);
