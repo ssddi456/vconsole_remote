@@ -13,7 +13,7 @@ function createSelectorFromEvent(el, childSelector) {
     if (el.id) {
         return '#' + el.id + childSelector;
     }
-    if(!el.tagName) {
+    if (!el.tagName) {
         return childSelector;
     }
     let nodeName = el.tagName.toLowerCase();
@@ -24,6 +24,41 @@ function createSelectorFromEvent(el, childSelector) {
     } else {
         return nodeName + childSelector
     }
+}
+
+function isClient() {
+    if (window.vconsoleEnv) {
+        if (vconsoleEnv.context == 'client') {
+            return true;
+        }
+    }
+}
+
+function isController() {
+    if (window.vconsoleEnv) {
+        if (vconsoleEnv.context == 'controller') {
+            return true;
+        }
+    }
+}
+
+function strToNode(v) {
+    var f = document.createElement("DIV");
+    f.innerHTML = v, v = f.children[0];
+    return v;
+}
+
+var traceFoldedObjectId = 0;
+var traceLogObj = new WeakMap();
+var indirectMap = {};
+function registFoldedLine(tag, obj) {
+    var foldedlineId = 'foldedline:::' + socket.id + ':::' + (traceFoldedObjectId++);
+    tag.setAttribute('foldedline', foldedlineId);
+    indirectMap[foldedlineId] = { foldedlineId };
+    traceLogObj.set(indirectMap[foldedlineId], obj);
+}
+function getFoldedLineObj(id) {
+    return traceLogObj.get(indirectMap[id]);
 }
 
 ! function (e, t) {
@@ -262,7 +297,7 @@ function createSelectorFromEvent(el, childSelector) {
                                             selector,
                                             params.target.value);
                                     }
-                                } 
+                                }
                             });
                             o.call(this, params);
                         }, !!r)
@@ -371,7 +406,7 @@ function createSelectorFromEvent(el, childSelector) {
         var n, r, i;
         r = [t, o(0), o(1), o(2), o(18), o(19), o(20)], void 0 === (i = "function" == typeof (n = function (o, n, r, i, a, l, c) {
             "use strict";
-
+            var domUtils = r;
             function s(e) {
                 return e && e.__esModule ? e : {
                     default: e
@@ -434,7 +469,89 @@ function createSelectorFromEvent(el, childSelector) {
                             if (!(e instanceof t)) throw new TypeError("Cannot call a class as a function")
                         }(this, t);
                         for (var n = arguments.length, r = new Array(n), i = 0; i < n; i++) r[i] = arguments[i];
-                        return o = v(this, (e = f(t)).call.apply(e, [this].concat(r))), g.push(o.id), o.tplTabbox = "", o.allowUnformattedLog = !0, o.isReady = !1, o.isShow = !1, o.$tabbox = null, o.console = {}, o.logList = [], o.isInBottom = !0, o.maxLogNumber = b, o.logNumber = 0, o.mockConsole(), o
+                        o = v(this, (e = f(t)).call.apply(e, [this].concat(r)));
+                        g.push(o.id);
+                        o.tplTabbox = "";
+                        o.allowUnformattedLog = !0;
+                        o.isReady = !1;
+                        o.isShow = !1;
+                        o.$tabbox = null;
+                        o.console = {};
+                        o.logList = [];
+                        o.isInBottom = !0;
+                        o.maxLogNumber = b;
+                        o.logNumber = 0;
+                        o.mockConsole();
+
+                        // 注册socket事件
+                        if (isController()) {
+                            socket.on('printRepeatLog', function (e) {
+                                originLog('printRepeatLog');
+                                o.printRepeatLog();
+                            });
+                            socket.on('printNewLog', function (e) {
+                                t = e[1];
+                                e = e[0];
+                                e.source = 'client';
+                                originLog('printNewLog', e, t);
+
+                                if (e.contentType == 'html') {
+                                    e.content = strToNode(e.content);
+                                }
+
+                                o.printNewLog(e, t);
+                            });
+
+                            var oldOnShow = o.onShow.bind(o);
+                            o.onShow = function () {
+                                oldOnShow();
+                                originLog(o.$tabbox);
+                                domUtils.delegate(domUtils.one(".vc-log", o.$tabbox),
+                                    "click",
+                                    ".vc-fold-outer",
+                                    function (t) {
+                                        var s = this.parentNode;
+                                        var id = s.getAttribute('foldedline');
+                                        domUtils.hasClass(s, "vc-toggle")
+                                            ? (
+                                                domUtils.removeClass(s, "vc-toggle"),
+                                                domUtils.removeClass(domUtils.one(".vc-fold-inner", s), "vc-toggle"),
+                                                domUtils.removeClass(domUtils.one(".vc-fold-outer", s), "vc-toggle")
+                                            )
+                                            : (
+                                                domUtils.addClass(s, "vc-toggle"),
+                                                domUtils.addClass(domUtils.one(".vc-fold-inner", s), "vc-toggle"),
+                                                domUtils.addClass(domUtils.one(".vc-fold-outer", s), "vc-toggle")
+                                            );
+
+                                        var i = domUtils.one(".vc-fold-inner", s);
+
+                                        return setTimeout(function () {
+                                            if (0 == i.children.length && e) {
+                                                socket
+                                                    .emit(
+                                                        'reqFoldedLineContent',
+                                                        id.split(':::')[1],
+                                                        id,
+                                                        function (html) {
+                                                            originLog('reqFoldedLineContent', html);
+                                                            i.innerHTML = html;
+                                                        });
+                                            }
+                                        });
+                                    });
+                            }
+
+
+                        } else if (isClient()) {
+                            socket.on('reqFoldedLineContent', function (id, callback) {
+                                var obj = getFoldedLineObj(id);
+                                originLog('reqFoldedLineContent', id, obj);
+                                callback(o.getFoldedLineContent(obj));
+                            });
+                        }
+
+                        return o;
                     }
                     var o, s, m;
                     return function (e, t) {
@@ -633,7 +750,12 @@ function createSelectorFromEvent(el, childSelector) {
                     }, {
                         key: "printRepeatLog",
                         value: function () {
-                            originLog('printRepeatLog', e, t);
+                            originLog('printRepeatLog');
+
+                            if (isClient()) {
+                                socket.emit('printRepeatLog');
+                            }
+
                             var e = r.default.one("#" + h._id),
                                 t = r.default.one(".vc-item-repeat", e);
                             t || ((t = document.createElement("i")).className = "vc-item-repeat", e.insertBefore(t, e.lastChild)), h.count, h.count++, t.innerHTML = h.count
@@ -642,6 +764,24 @@ function createSelectorFromEvent(el, childSelector) {
                         key: "printNewLog",
                         value: function (e, t) {
                             originLog('printNewLog', e, t);
+
+                            if (isClient()) {
+                                var logData = {
+                                    ...e
+                                };
+
+                                if (e.content instanceof Element) {
+                                    logData.content = e.content.parentNode.innerHTML;
+                                    logData.contentType = 'html';
+                                }
+
+                                socket.emit('printNewLog', [logData, t]);
+                            } else if (isController()) {
+                                if (e.source !== 'client') {
+                                    return;
+                                }
+                            }
+
                             var o = r.default.render(a.default, {
                                 _id: e._id,
                                 logType: e.logType,
@@ -668,7 +808,73 @@ function createSelectorFromEvent(el, childSelector) {
                             }
                             n.isObject(e.content) && f.insertAdjacentElement("beforeend", e.content), r.default.one(".vc-log", this.$tabbox).insertAdjacentElement("beforeend", o), this.logNumber++, this.limitMaxLogs()
                         }
-                    }, {
+                    },
+                    {
+                        key: 'getFoldedLineContent',
+                        value: function (e) {
+                            var o = this;
+                            var i = document.createElement('DIV');
+                            for (var t = n.getObjAllKeys(e), a = 0; a < t.length; a++) {
+                                var s = void 0,
+                                    d = "undefined",
+                                    u = "";
+                                try {
+                                    s = e[t[a]]
+                                } catch (e) {
+                                    continue
+                                }
+                                n.isString(s) ? (d = "string", s = '"' + s + '"') : n.isNumber(s) ? d = "number" : n.isBoolean(s) ? d = "boolean" : n.isNull(s) ? (d = "null", s = "null") : n.isUndefined(s) ? (d = "undefined", s = "undefined") : n.isFunction(s) ? (d = "function", s = "function()") : n.isSymbol(s) && (d = "symbol");
+                                var v = void 0;
+                                if (n.isArray(s)) {
+                                    var f = n.getObjName(s) + "[" + s.length + "]";
+                                    v = o.getFoldedLine(s, r.default.render(c.default, {
+                                        key: t[a],
+                                        keyType: u,
+                                        value: f,
+                                        valueType: "array"
+                                    }, !0))
+                                } else if (n.isObject(s)) {
+                                    var p = n.getObjName(s);
+                                    v = o.getFoldedLine(s, r.default.render(c.default, {
+                                        key: n.htmlEncode(t[a]),
+                                        keyType: u,
+                                        value: p,
+                                        valueType: "object"
+                                    }, !0))
+                                } else {
+                                    e.hasOwnProperty && !e.hasOwnProperty(t[a]) && (u = "private");
+                                    var b = {
+                                        lineType: "kv",
+                                        key: n.htmlEncode(t[a]),
+                                        keyType: u,
+                                        value: n.htmlEncode(s),
+                                        valueType: d
+                                    };
+                                    v = r.default.render(l.default, b)
+                                }
+                                i.insertAdjacentElement("beforeend", v)
+                            }
+                            if (n.isObject(e)) {
+                                var g, h = e.__proto__;
+                                g = n.isObject(h)
+                                    ? o.getFoldedLine(h, r.default.render(c.default, {
+                                        key: "__proto__",
+                                        keyType: "private",
+                                        value: n.getObjName(h),
+                                        valueType: "object"
+                                    }, !0))
+                                    : r.default.render(c.default, {
+                                        key: "__proto__",
+                                        keyType: "private",
+                                        value: "null",
+                                        valueType: "null"
+                                    });
+                                i.insertAdjacentElement("beforeend", g);
+                            }
+                            return i.innerHTML;
+                        }
+                    },
+                    {
                         key: "getFoldedLine",
                         value: function (e, t) {
                             var o = this;
@@ -681,8 +887,25 @@ function createSelectorFromEvent(el, childSelector) {
                                 outer: t,
                                 lineType: "obj"
                             });
-                            return r.default.bind(r.default.one(".vc-fold-outer", s), "click", function (t) {
-                                t.preventDefault(), t.stopPropagation(), r.default.hasClass(s, "vc-toggle") ? (r.default.removeClass(s, "vc-toggle"), r.default.removeClass(r.default.one(".vc-fold-inner", s), "vc-toggle"), r.default.removeClass(r.default.one(".vc-fold-outer", s), "vc-toggle")) : (r.default.addClass(s, "vc-toggle"), r.default.addClass(r.default.one(".vc-fold-inner", s), "vc-toggle"), r.default.addClass(r.default.one(".vc-fold-outer", s), "vc-toggle"));
+
+                            if (isClient()) {
+                                registFoldedLine(s, e);
+                            }
+
+                            r.default.bind(r.default.one(".vc-fold-outer", s), "click", function (t) {
+                                t.preventDefault();
+                                t.stopPropagation();
+                                r.default.hasClass(s, "vc-toggle")
+                                    ? (
+                                        r.default.removeClass(s, "vc-toggle"),
+                                        r.default.removeClass(r.default.one(".vc-fold-inner", s), "vc-toggle"),
+                                        r.default.removeClass(r.default.one(".vc-fold-outer", s), "vc-toggle")
+                                    )
+                                    : (
+                                        r.default.addClass(s, "vc-toggle"),
+                                        r.default.addClass(r.default.one(".vc-fold-inner", s), "vc-toggle"),
+                                        r.default.addClass(r.default.one(".vc-fold-outer", s), "vc-toggle")
+                                    );
                                 var i = r.default.one(".vc-fold-inner", s);
                                 return setTimeout(function () {
                                     if (0 == i.children.length && e) {
@@ -728,21 +951,25 @@ function createSelectorFromEvent(el, childSelector) {
                                         }
                                         if (n.isObject(e)) {
                                             var g, h = e.__proto__;
-                                            g = n.isObject(h) ? o.getFoldedLine(h, r.default.render(c.default, {
-                                                key: "__proto__",
-                                                keyType: "private",
-                                                value: n.getObjName(h),
-                                                valueType: "object"
-                                            }, !0)) : r.default.render(c.default, {
-                                                key: "__proto__",
-                                                keyType: "private",
-                                                value: "null",
-                                                valueType: "null"
-                                            }), i.insertAdjacentElement("beforeend", g)
+                                            g = n.isObject(h)
+                                                ? o.getFoldedLine(h, r.default.render(c.default, {
+                                                    key: "__proto__",
+                                                    keyType: "private",
+                                                    value: n.getObjName(h),
+                                                    valueType: "object"
+                                                }, !0))
+                                                : r.default.render(c.default, {
+                                                    key: "__proto__",
+                                                    keyType: "private",
+                                                    value: "null",
+                                                    valueType: "null"
+                                                });
+                                            i.insertAdjacentElement("beforeend", g);
                                         }
                                     }
                                 }), !1
-                            }), s
+                            });
+                            return s;
                         }
                     }]) && u(o.prototype, s), m && u(o, m), t
                 }();
@@ -1252,7 +1479,9 @@ function createSelectorFromEvent(el, childSelector) {
                             if (this.isInited) {
                                 var e = this;
                                 i.default.one(".vc-panel", this.$dom).style.display = "block", setTimeout(function () {
-                                    i.default.addClass(e.$dom, "vc-toggle"), e._triggerPluginsEvent("showConsole"), i.default.one(".vc-mask", e.$dom).style.display = "block"
+                                    i.default.addClass(e.$dom, "vc-toggle");
+                                    e._triggerPluginsEvent("showConsole");
+                                    i.default.one(".vc-mask", e.$dom).style.display = "block"
                                 }, 10)
                             }
                         }
@@ -1283,9 +1512,22 @@ function createSelectorFromEvent(el, childSelector) {
                         value: function (e) {
                             if (this.isInited) {
                                 var t = i.default.one("#__vc_log_" + e);
-                                i.default.removeClass(i.default.all(".vc-tab", this.$dom), "vc-actived"), i.default.addClass(i.default.one("#__vc_tab_" + e), "vc-actived"), i.default.removeClass(i.default.all(".vc-logbox", this.$dom), "vc-actived"), i.default.addClass(t, "vc-actived");
+                                i.default.removeClass(i.default.all(".vc-tab", this.$dom), "vc-actived");
+                                i.default.addClass(i.default.one("#__vc_tab_" + e), "vc-actived");
+                                i.default.removeClass(i.default.all(".vc-logbox", this.$dom), "vc-actived");
+                                i.default.addClass(t, "vc-actived");
                                 var o = i.default.all(".vc-topbar-" + e, this.$dom);
-                                i.default.removeClass(i.default.all(".vc-toptab", this.$dom), "vc-toggle"), i.default.addClass(o, "vc-toggle"), o.length > 0 ? i.default.addClass(i.default.one(".vc-content", this.$dom), "vc-has-topbar") : i.default.removeClass(i.default.one(".vc-content", this.$dom), "vc-has-topbar"), i.default.removeClass(i.default.all(".vc-tool", this.$dom), "vc-toggle"), i.default.addClass(i.default.all(".vc-tool-" + e, this.$dom), "vc-toggle"), this.activedTab && this._triggerPluginEvent(this.activedTab, "hide"), this.activedTab = e, this._triggerPluginEvent(this.activedTab, "show")
+                                i.default.removeClass(i.default.all(".vc-toptab", this.$dom), "vc-toggle");
+                                i.default.addClass(o, "vc-toggle");
+                                o.length > 0
+                                    ? i.default.addClass(i.default.one(".vc-content", this.$dom), "vc-has-topbar")
+                                    : i.default.removeClass(i.default.one(".vc-content", this.$dom), "vc-has-topbar");
+
+                                i.default.removeClass(i.default.all(".vc-tool", this.$dom), "vc-toggle");
+                                i.default.addClass(i.default.all(".vc-tool-" + e, this.$dom), "vc-toggle");
+                                this.activedTab && this._triggerPluginEvent(this.activedTab, "hide");
+                                this.activedTab = e;
+                                this._triggerPluginEvent(this.activedTab, "show");
                             }
                         }
                     }, {
@@ -1580,6 +1822,11 @@ function createSelectorFromEvent(el, childSelector) {
                 }, {
                     key: "evalCommand",
                     value: function (e) {
+                        if (isController()) {
+                            socket.emit('evalCommand', e);
+                            return;
+                        }
+
                         this.printLog({
                             logType: "log",
                             content: _query.default.render(_item_code.default, {
@@ -1596,14 +1843,24 @@ function createSelectorFromEvent(el, childSelector) {
                                 o = eval.call(window, e)
                             } catch (e) { }
                         }
-                        tool.isArray(o) || tool.isObject(o) ? t = this.getFoldedLine(o) : (tool.isNull(o) ? o = "null" : tool.isUndefined(o) ? o = "undefined" : tool.isFunction(o) ? o = "function()" : tool.isString(o) && (o = '"' + o + '"'), t = _query.default.render(_item_code.default, {
-                            content: o,
-                            type: "output"
-                        })), this.printLog({
+                        tool.isArray(o) || tool.isObject(o)
+                            ? (t = this.getFoldedLine(o))
+                            : (
+                                tool.isNull(o) ? o = "null"
+                                    : tool.isUndefined(o) ? o = "undefined"
+                                        : tool.isFunction(o) ? o = "function()"
+                                            : tool.isString(o) && (o = '"' + o + '"'),
+                                t = _query.default.render(_item_code.default, {
+                                    content: o,
+                                    type: "output"
+                                })
+                            );
+                        this.printLog({
                             logType: "log",
                             content: t,
                             style: ""
-                        }), window.winKeys = Object.getOwnPropertyNames(window).sort()
+                        });
+                        window.winKeys = Object.getOwnPropertyNames(window).sort()
                     }
                 }]), VConsoleDefaultTab
             }(_log.default),
